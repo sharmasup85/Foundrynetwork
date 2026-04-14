@@ -2,6 +2,10 @@
 
 All the learnings of Foundry networking, outbound restrictions, and MCP tool private FQDN behavior.
 
+## Pages
+
+- [Foundry Account Outbound Restrictions — BYO VNet vs Managed VNet](outbound-restrictions.md)
+
 ---
 
 ## Investigation Process
