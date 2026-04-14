@@ -2,46 +2,67 @@
 
 All the learnings of Foundry networking, outbound restrictions, and MCP tool private FQDN behavior.
 
-## Key Finding: MCP Tool Private FQDNs and Foundry Outbound Restrictions
+---
 
-MCP tool private FQDNs behave differently depending on which network isolation approach is used.
+## Investigation Process
 
-### Managed Virtual Network (Preview) — Private MCP NOT Supported
+Searched Microsoft Learn documentation for the latest information on Foundry account outbound restrictions and MCP tool networking behavior using the following queries:
 
-Per [Microsoft Learn - Managed VNet Limitations #8](https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network#limitations):
+1. **Microsoft Docs Search** — `Azure AI Foundry account outbound network restrictions managed virtual network`
+2. **Microsoft Docs Search** — `Azure AI Foundry MCP tools private endpoints FQDN outbound rules networking`
 
-> **End-to-end network isolation for Agent MCP tools with managed virtual network is currently not supported.** Use public MCP tools with managed network isolation Foundry.
+Full pages fetched and reviewed:
 
-Private FQDNs for MCP tool servers are **not honored** by the Foundry account's outbound restrictions when using the managed VNet. MCP tool traffic does not flow through the managed network's private endpoint or FQDN outbound rules.
-
-### Custom (BYO) VNet with Network Injection (GA) — Private MCP Supported
-
-Per [Microsoft Learn - Agent tools with network isolation](https://learn.microsoft.com/azure/foundry/how-to/configure-private-link#agent-tools-with-network-isolation):
-
-Private MCP is fully supported with BYO VNet. Traffic flows through your VNet subnet.
-
-| Isolation Approach | Private MCP Support | Status |
-|---|---|---|
-| Managed Virtual Network (preview) | **Not supported** — MCP tools must be public | Preview |
-| Custom (BYO) VNet with network injection | **Supported** — traffic flows through VNet subnet | GA |
+- [Configure managed virtual network for Microsoft Foundry projects](https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network)
+- [How to configure network isolation for Microsoft Foundry](https://learn.microsoft.com/azure/foundry/how-to/configure-private-link)
+- [Connect agents to Model Context Protocol servers](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol)
 
 ---
 
-## Foundry Account Outbound Restriction Modes (Managed VNet)
+## Foundry Account Outbound Restrictions and MCP Tool Private FQDN Behavior
+
+### The Observation Is Correct — This Is a Known, Documented Limitation
+
+Per the current [Microsoft Learn documentation for managed virtual networks](https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network#limitations), **Limitation #8** explicitly states:
+
+> **End-to-end network isolation for Agent MCP tools with managed virtual network is currently not supported.** Use public MCP tools with managed network isolation Foundry.
+
+This means that when you use the **managed virtual network** (preview) isolation mode on a Foundry account, private FQDNs for MCP tool servers are **not honored** by the Foundry account's outbound restrictions. MCP tool traffic does not flow through the managed network's private endpoint or FQDN outbound rules.
+
+### The Two Isolation Approaches Behave Differently for MCP
+
+| Isolation Approach | Private MCP Support | Doc Reference |
+|---|---|---|
+| **Managed Virtual Network** (preview) | **Not supported** — MCP tools must be public | [Managed VNet Limitations #8](https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network#limitations) |
+| **Custom (BYO) VNet** with network injection (GA) | **Supported** — Private MCP flows through your VNet subnet | [Agent tools with network isolation](https://learn.microsoft.com/azure/foundry/how-to/configure-private-link#agent-tools-with-network-isolation) |
+
+The [configure-private-link](https://learn.microsoft.com/azure/foundry/how-to/configure-private-link#agent-tools-with-network-isolation) page confirms that **MCP Tool (Private MCP)** is supported in the **BYO VNet** model with traffic flowing "through your VNet subnet." For private MCP, you must deploy your MCP server on Azure Container Apps with internal-only ingress on a dedicated MCP subnet delegated to `Microsoft.App/environments`.
+
+### Foundry Account Outbound Restriction Modes (Managed VNet)
 
 | Outbound Mode | Description |
 |---|---|
-| Allow internet outbound | All outbound traffic to the internet is permitted. |
-| Allow only approved outbound | Outbound restricted using service tags, managed private endpoints, and optional FQDN rules (ports 80/443 only) enforced via managed Azure Firewall. |
-| Disabled | No managed VNet; use public outbound or supply your own VNet. |
+| **Allow internet outbound** | All outbound traffic to the internet is permitted. |
+| **Allow only approved outbound** | Outbound restricted using **service tags**, **managed private endpoints**, and optional **FQDN rules** (ports 80/443 only) enforced via a managed Azure Firewall. |
+| **Disabled** | No managed VNet; use public outbound or supply your own VNet. |
 
-### Key Constraints Under "Allow Only Approved Outbound"
-
+Key restrictions under "Allow Only Approved Outbound":
 - FQDN outbound rules support **only ports 80 and 443**
 - A managed Azure Firewall is auto-provisioned (cannot bring your own)
 - Each Foundry account gets its own firewall (no sharing)
 - Outbound rules are created via **Azure CLI only** (`az rest`)
 - Private endpoints must be created to Cosmos DB, Storage, and AI Search for Standard BYO agents
+
+### Has This Changed?
+
+Yes — the **managed virtual network** feature is currently in **public preview** and the MCP tool limitation is a known gap in this preview. If you previously tested private MCP FQDNs working with outbound restrictions, you were likely using the **custom (BYO) VNet with network injection** approach (GA), where private MCP is fully supported through your own subnet. The managed VNet preview introduced a **different** networking architecture (Microsoft-managed VNet with managed private endpoints) that does **not yet** support MCP tool private connectivity.
+
+### Workaround
+
+If you need private MCP with network isolation today, use the **custom (BYO) VNet** approach with:
+- The [19-hybrid-private-resources-agent-setup](https://github.com/microsoft-foundry/foundry-samples/tree/main/infrastructure/infrastructure-setup-bicep/19-hybrid-private-resources-agent-setup) Bicep template
+- A dedicated MCP subnet delegated to `Microsoft.App/environments`
+- Your MCP server deployed on Azure Container Apps with **internal-only ingress**
 
 ---
 
